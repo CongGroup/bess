@@ -1,5 +1,5 @@
-#ifndef _TC_H_
-#define _TC_H_
+#ifndef BESS_CORE_TC_H_
+#define BESS_CORE_TC_H_
 
 #include <string.h>
 
@@ -18,13 +18,6 @@
 #define MAX_LIMIT_POW 36
 #define USAGE_AMPLIFIER_POW 32
 
-enum {
-  RESOURCE_CNT = 0, /* how many times scheduled */
-  RESOURCE_CYCLE,
-  RESOURCE_PACKET,
-  RESOURCE_BIT,
-  NUM_RESOURCES, /* Sentinel. Do not use. */
-};
 
 /* share is defined relatively, so 1024 should be large enough */
 #define MAX_SHARE (1 << 10)
@@ -35,55 +28,91 @@ enum {
 
 typedef uint64_t resource_arr_t[NUM_RESOURCES] __ymm_aligned;
 
-// TODO(barath): This container is meant to be temporary, until we port the below TC code
-// to C++, at which point this container can be moved to the new TC class.
-//
-// A simple container to hold global TC members as was contained in namespace.h
-namespace TCContainer {
-extern std::unordered_map<std::string, struct tc *> tcs;
-}  // TCContainer
-
 /* pgroup is a collection of sibling classes with the same priority */
-struct pgroup {
-  struct heap pq;
+class PriorityGroup {
+ public:
+  PriorityGroup() : pq_(), priority_(), resource_(), num_children_(), tc_() {}
 
-  int32_t priority;
+ private:
+  struct heap pq_;
 
-  int resource; /* [0, NUM_RESOURCES - 1] */
-  int num_children;
+  int32_t priority_;
 
-  struct cdlist_item tc;
+  int resource_; /* [0, NUM_RESOURCES - 1] */
+  int num_children_;
+
+  struct cdlist_item tc_;
 };
 
-struct tc_params {
-  std::string name;
+class TCStats {
+ public:
+  TCStats() : usage_(), cnt_throttled_() {}
 
-  struct tc *parent;
+ private:
+  resource_arr_t usage_;
+  uint64_t cnt_throttled_;
+};
+
+class TCParams {
+ public:
+  enum ResourceType {
+    RESOURCE_CNT = 0, /* how many times scheduled */
+    RESOURCE_CYCLE,
+    RESOURCE_PACKET,
+    RESOURCE_BIT,
+    NUM_RESOURCES, /* Sentinel. Do not use. */
+  };
+
+  TCParams()
+      : name_(),
+        parent_(),
+        auto_free_(),
+        priority_(),
+        share_(),
+        share_resource_(),
+        limit_(),
+        max_burst_() {}
+
+ private:
+  std::string name_;
+
+  struct tc *parent_;
 
   /* Used for auto-generated TCs.
    * (if its last task is detached, free the tc as well) */
-  int auto_free;
+  int auto_free_;
 
-  int32_t priority;
+  int32_t priority_;
 
-  int32_t share;
-  int share_resource;
+  int32_t share_;
+  int share_resource_;
 
   /* in bits/pkts/cycles per sec. 0 if unlimited */
-  uint64_t limit[NUM_RESOURCES];
-  uint64_t max_burst[NUM_RESOURCES];
+  uint64_t limit_[NUM_RESOURCES];
+  uint64_t max_burst_[NUM_RESOURCES];
 };
 
-struct tc_stats {
-  resource_arr_t usage;
-  uint64_t cnt_throttled;
+class TCBuilder {
+ public:
+  TCBuilder() : all_tcs_() {}
+
+  TC *AddTc(const TCParams &params, Sched *s);
+
+
+ private:
+  std::unordered_map<std::string, struct tc *> all_tcs_;
 };
+
+// Singleton TC instance for normal operation.  (For testing we may set up
+// more.)
+extern TC tc;
+
 
 /***************************************************************************
  * Any change to the layout of this struct may affect performance.
  * Please group fields in a way that maximizes spatial cache locality.
  ***************************************************************************/
-struct tc {
+class TC {
   /* NOTE: This counter is not atomic.
    * 1 by owner (the creator, or the scheduler if it is root),
    * 1 by ss.my_group->pq (when queued == 1),
@@ -204,4 +233,4 @@ void sched_test_alloc();
 
 void print_last_stats(struct sched *s);
 
-#endif
+#endif  // namespace BESS_CORE_TC_H_

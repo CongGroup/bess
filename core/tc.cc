@@ -20,10 +20,8 @@
 
 #include "tc.h"
 
-// TODO(barath): move this global container of TCs to the TC class once it exists.
-namespace TCContainer {
-std::unordered_map<std::string, struct tc *> tcs;
-}  // TCContainer
+// Singleton TC instance for normal operation.
+TC tc;
 
 // Capture the "print TC stats" command line flag.
 DECLARE_bool(s);
@@ -67,10 +65,7 @@ pgroup_add:
   c->ss.my_pgroup = g;
 }
 
-/* TODO: separate tc creation and association with scheduler */
-struct tc *tc_init(struct sched *s, const struct tc_params *params) {
-  struct tc *c;
-
+TC *AddTc(const TCParams &params, Sched *s) {
   int i;
 
   assert(!s->current);
@@ -81,7 +76,7 @@ struct tc *tc_init(struct sched *s, const struct tc_params *params) {
   assert(params->share > 0);
   assert(params->share <= MAX_SHARE);
 
-  c = (struct tc *)mem_alloc(sizeof(*c));
+  TC *c = new TC();
   if (!c) oom_crash();
 
   if (!TCContainer::tcs.insert({params->name, c}).second) {
